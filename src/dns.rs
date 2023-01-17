@@ -44,6 +44,11 @@ impl Dns {
             }
         }
     }
+
+    #[inline]
+    pub(crate) fn is_disabled(&self) -> bool {
+        self.project_id == "<project_id>" || self.token == "<token>"
+    }
 }
 
 impl Display for Dns {
@@ -65,20 +70,20 @@ impl TryFrom<String> for Dns {
         })?;
         if url.scheme().is_empty() {
             return Err(Error::InvalidDns {
-                dns: s.clone(),
+                dns: s,
                 reason: "schema is not exist".into(),
             });
         }
 
         let host = if let Some(mut h) = url.host_str() {
             if h == "api.uptrace.dev" {
-                h = "uptrace.dev".into();
+                h = "uptrace.dev";
             }
 
             h.to_string()
         } else {
             return Err(Error::InvalidDns {
-                dns: s.clone(),
+                dns: s,
                 reason: "host is not exist".into(),
             });
         };
@@ -88,7 +93,7 @@ impl TryFrom<String> for Dns {
             .and_then(|x| {
                 let path = x.filter(|x| !x.is_empty()).collect::<Vec<&str>>();
                 if path.is_empty() {
-                    return None;
+                    None
                 } else {
                     Some(path)
                 }

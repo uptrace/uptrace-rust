@@ -6,6 +6,8 @@ pub enum Error {
     EmptyDns,
     #[error("invalid dns: {}, reason: {}", .dns, .reason)]
     InvalidDns { dns: String, reason: String },
-    #[error("span build error: {}", 0)]
-    SpanBuildError(Box<dyn StdError>),
+    #[error("trace build error: {}", 0)]
+    TraceBuildError(Box<dyn StdError>),
+    #[error("metrics build error: {}", 0)]
+    MetricsBuildError(Box<dyn StdError>),
 }
