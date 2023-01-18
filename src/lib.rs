@@ -1,3 +1,31 @@
+//! # Quickstart
+//!
+//!
+//! ```no_run
+//! use uptrace::UptraceBuilder;
+//! use opentelemetry::{global, trace::{Tracer, Span}, KeyValue};
+//!
+//! fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     // You can also start to tracing and metrics.
+//!     UptraceBuilder::new()
+//!         .with_dns("http://project2_secret_token@localhost:14317/2")
+//!         .with_service_name("lol")
+//!         .install_simple()?;
+//!     
+//!     let tracer = global::tracer("rust-service");
+//!     let mut span = tracer.start("my_span");
+//!     span.set_attribute(KeyValue::new("http.client_ip", "83.164.160.102"));
+//!     span.set_attribute(KeyValue::new("now", "2022-01-18 15:00:00"));
+//!     span.end();
+//!     
+//!     println!("{:?}", span.span_context().trace_id().to_string());
+//!     global::shutdown_tracer_provider();
+//!     Ok(())
+//! }
+//! ```
+//!
+//! [uptrace]: https://uptrace.dev/
+
 use std::time::Duration;
 
 pub mod dns;
