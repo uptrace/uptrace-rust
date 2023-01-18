@@ -10,10 +10,7 @@ use opentelemetry::{
     global, runtime,
     sdk::{
         export::metrics::aggregation::delta_temporality_selector,
-        metrics::{
-            controllers::{self},
-            processors, selectors,
-        },
+        metrics::{controllers, processors, selectors},
         trace::{self, BatchSpanProcessor, TracerProvider},
         Resource,
     },
