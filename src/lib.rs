@@ -34,17 +34,18 @@ pub use dsn::Dsn;
 pub mod error;
 pub use error::Error;
 
+use opentelemetry::runtime;
+use opentelemetry::sdk::export::metrics::aggregation::delta_temporality_selector;
+use opentelemetry::sdk::metrics::selectors;
 use opentelemetry::{
-    global, runtime,
+    global,
     sdk::{
-        export::metrics::aggregation::delta_temporality_selector,
-        metrics::{controllers, processors, selectors},
         trace::{self, BatchSpanProcessor, TracerProvider},
         Resource,
     },
-    Context, KeyValue,
+    KeyValue,
 };
-use opentelemetry_otlp::{SpanExporterBuilder, WithExportConfig};
+use opentelemetry_otlp::{ExportConfig, Protocol, SpanExporterBuilder, WithExportConfig};
 use tonic::metadata::MetadataMap;
 
 pub struct UptraceBuilder {
@@ -140,7 +141,7 @@ impl UptraceBuilder {
         }
     }
 
-    pub fn install_simple(mut self) -> Result<(), Error> {
+    pub fn configure_opentelemetry(mut self) -> Result<(), Error> {
         if std::env::var("UPTRACE_DISABLED").is_ok() {
             return Ok(());
         }
@@ -151,11 +152,11 @@ impl UptraceBuilder {
         }
 
         if !self.disable_trace {
-            self.build_trace(&dsn)?;
+            self.init_tracing(&dsn)?;
         }
 
         if !self.disable_metrics {
-            self.build_metrics(&dsn)?;
+            self.init_metrics(&dsn)?;
         }
 
         Ok(())
@@ -191,7 +192,7 @@ impl UptraceBuilder {
         Resource::new(kv.into_iter())
     }
 
-    fn build_trace(&mut self, dsn: &Dsn) -> Result<(), Error> {
+    fn init_tracing(&mut self, dsn: &Dsn) -> Result<(), Error> {
         let resource = self.build_resource();
         self.trace_config = if let Some(cfg) = self.trace_config.take() {
             let new_resource = Resource::empty();
@@ -235,22 +236,33 @@ impl UptraceBuilder {
         Ok(())
     }
 
-    fn build_metrics(&mut self, _dsn: &Dsn) -> Result<(), Error> {
-        let builder = controllers::basic(processors::factory(
-            selectors::simple::inexpensive(),
-            delta_temporality_selector(),
-        ))
-        .with_resource(self.build_resource())
-        .with_collect_period(Duration::from_secs(15))
-        .with_collect_timeout(Duration::from_secs(5))
-        .with_push_timeout(Duration::from_secs(5));
+    fn init_metrics(&mut self, dsn: &Dsn) -> Result<(), Error> {
+        let export_config = ExportConfig {
+            endpoint: dsn.otlp_grpc_addr(),
+            timeout: Duration::from_secs(10),
+            protocol: Protocol::Grpc,
+        };
 
-        let controller = builder.build();
-        controller
-            .start(&Context::current(), runtime::Tokio)
+        let mut metadata = MetadataMap::with_capacity(1);
+        metadata.insert("uptrace-dsn", dsn.original.as_str().parse().unwrap());
+
+        let exporter = opentelemetry_otlp::new_exporter()
+            .tonic()
+            .with_export_config(export_config)
+            .with_metadata(metadata);
+
+        let _ctrl = opentelemetry_otlp::new_pipeline()
+            .metrics(
+                selectors::simple::inexpensive(),
+                delta_temporality_selector(),
+                runtime::Tokio,
+            )
+            .with_exporter(exporter)
+            .with_period(Duration::from_secs(15))
+            .with_timeout(Duration::from_secs(5))
+            .build()
             .map_err(|e| Error::MetricsBuildError(Box::new(e)))?;
 
-        global::set_meter_provider(controller);
         Ok(())
     }
 }
