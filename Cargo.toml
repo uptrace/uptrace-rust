@@ -11,10 +11,10 @@ description = "OpenTelemetry Rust distribution for Uptrace"
 opentelemetry = { version = "0.18.0", features = ["trace", "rt-tokio"] }
 thiserror = "1.0.38"
 url = "2.3.1"
-opentelemetry-otlp = { version = "0.11.0", features = ["metrics", "trace"] }
+opentelemetry-otlp = { version = "0.11.0", features = ["tonic", "tls", "tls-roots"] }
 hostname = "0.3.1"
 tracing-opentelemetry = "0.18.0"
-tonic = "0.8.3"
+tonic = {version = "0.8.3", features = ["tls"]}
 
 [dev-dependencies]
 tokio = { version = "1.24.1", features = ["full"] }

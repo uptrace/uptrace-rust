@@ -6,7 +6,7 @@ use url::Url;
 use crate::Error;
 
 #[derive(Default)]
-pub struct Dns {
+pub struct Dsn {
     pub(crate) original: String,
     pub(crate) scheme: String,
     pub(crate) host: String,
@@ -15,7 +15,7 @@ pub struct Dns {
     pub(crate) token: String,
 }
 
-impl Dns {
+impl Dsn {
     pub fn otlp_host(&self) -> String {
         if self.host == "uptrace.dev" {
             "otlp.uptrace.dev:4317".into()
@@ -34,6 +34,7 @@ impl Dns {
 
         format!("{}://{}:{}", self.scheme, self.host, 14318)
     }
+
     pub fn otlp_grpc_addr(&self) -> String {
         if self.host == "uptrace.dev" {
             "https://otlp.uptrace.dev:4317".into()
@@ -51,26 +52,26 @@ impl Dns {
     }
 }
 
-impl Display for Dns {
+impl Display for Dsn {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.original)
     }
 }
 
-impl TryFrom<String> for Dns {
+impl TryFrom<String> for Dsn {
     type Error = Error;
-    fn try_from(s: String) -> Result<Dns, Self::Error> {
+    fn try_from(s: String) -> Result<Dsn, Self::Error> {
         if s.is_empty() {
-            return Err(Error::EmptyDns);
+            return Err(Error::EmptyDsn);
         }
 
-        let url = Url::parse(&s).map_err(|e| Error::InvalidDns {
-            dns: s.clone(),
+        let url = Url::parse(&s).map_err(|e| Error::InvalidDsn {
+            dsn: s.clone(),
             reason: e.to_string(),
         })?;
         if url.scheme().is_empty() {
-            return Err(Error::InvalidDns {
-                dns: s,
+            return Err(Error::InvalidDsn {
+                dsn: s,
                 reason: "schema is not exist".into(),
             });
         }
@@ -82,8 +83,8 @@ impl TryFrom<String> for Dns {
 
             h.to_string()
         } else {
-            return Err(Error::InvalidDns {
-                dns: s,
+            return Err(Error::InvalidDsn {
+                dsn: s,
                 reason: "host is not exist".into(),
             });
         };
@@ -98,19 +99,19 @@ impl TryFrom<String> for Dns {
                     Some(path)
                 }
             })
-            .ok_or_else(|| Error::InvalidDns {
-                dns: s.clone(),
+            .ok_or_else(|| Error::InvalidDsn {
+                dsn: s.clone(),
                 reason: "project id is not exist".into(),
             })?;
 
         if url.username().is_empty() {
-            return Err(Error::InvalidDns {
-                dns: s.clone(),
+            return Err(Error::InvalidDsn {
+                dsn: s.clone(),
                 reason: "token is not exist".into(),
             });
         }
 
-        Ok(Dns {
+        Ok(Dsn {
             original: s,
             scheme: url.scheme().into(),
             host: if host.eq("api.uptrace.dev") {
@@ -129,31 +130,31 @@ impl TryFrom<String> for Dns {
 mod tests {
     use std::vec;
 
-    use super::Dns;
+    use super::Dsn;
 
     #[test]
-    fn valid_dns() {
+    fn valid_dsn() {
         let raw = "http://project1_secret_token@localhost:14317/1";
-        let dns: Dns = raw.to_string().try_into().unwrap();
-        assert_eq!(dns.original, raw.to_string());
-        assert_eq!(dns.host, "localhost".to_string());
-        assert_eq!(dns.port, Some(14317));
-        assert_eq!(dns.scheme, "http".to_string());
-        assert_eq!(dns.token, "project1_secret_token".to_string());
-        assert_eq!(dns.project_id, "1".to_string());
+        let dsn: Dsn = raw.to_string().try_into().unwrap();
+        assert_eq!(dsn.original, raw.to_string());
+        assert_eq!(dsn.host, "localhost".to_string());
+        assert_eq!(dsn.port, Some(14317));
+        assert_eq!(dsn.scheme, "http".to_string());
+        assert_eq!(dsn.token, "project1_secret_token".to_string());
+        assert_eq!(dsn.project_id, "1".to_string());
     }
 
     #[test]
-    fn invalid_dns() {
-        let dns = vec![
+    fn invalid_dsn() {
+        let dsn = vec![
             "http://project1_secret_token@localhost:14317",
             "http://project1_secret_token@:14317/1",
             "http://localhost:14317/1",
             "project1_secret_token@localhost:14317/1",
         ];
-        for i in dns.into_iter() {
+        for i in dsn.into_iter() {
             eprintln!("{i}");
-            assert!(Dns::try_from(i.to_string()).is_err())
+            assert!(Dsn::try_from(i.to_string()).is_err())
         }
     }
 
@@ -175,8 +176,8 @@ mod tests {
         ];
 
         for (i, j) in tables {
-            let dns = Dns::try_from(i.to_string()).unwrap();
-            assert_eq!(dns.otlp_host(), j);
+            let dsn = Dsn::try_from(i.to_string()).unwrap();
+            assert_eq!(dsn.otlp_host(), j);
         }
     }
 
@@ -194,8 +195,8 @@ mod tests {
         ];
 
         for (i, j) in tables {
-            let dns = Dns::try_from(i.to_string()).unwrap();
-            assert_eq!(dns.app_addr(), j);
+            let dsn = Dsn::try_from(i.to_string()).unwrap();
+            assert_eq!(dsn.app_addr(), j);
         }
     }
 }

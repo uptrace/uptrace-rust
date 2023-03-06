@@ -8,16 +8,16 @@
 //! fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     // You can also start to tracing and metrics.
 //!     UptraceBuilder::new()
-//!         .with_dns("http://project2_secret_token@localhost:14317/2")
+//!         .with_dsn("http://project2_secret_token@localhost:14317/2")
 //!         .with_service_name("lol")
 //!         .install_simple()?;
-//!     
+//!
 //!     let tracer = global::tracer("rust-service");
 //!     let mut span = tracer.start("my_span");
 //!     span.set_attribute(KeyValue::new("http.client_ip", "83.164.160.102"));
 //!     span.set_attribute(KeyValue::new("now", "2022-01-18 15:00:00"));
 //!     span.end();
-//!     
+//!
 //!     println!("{:?}", span.span_context().trace_id().to_string());
 //!     global::shutdown_tracer_provider();
 //!     Ok(())
@@ -28,8 +28,8 @@
 
 use std::time::Duration;
 
-pub mod dns;
-pub use dns::Dns;
+pub mod dsn;
+pub use dsn::Dsn;
 
 pub mod error;
 pub use error::Error;
@@ -48,7 +48,7 @@ use opentelemetry_otlp::{SpanExporterBuilder, WithExportConfig};
 use tonic::metadata::MetadataMap;
 
 pub struct UptraceBuilder {
-    dns: Option<String>,
+    dsn: Option<String>,
 
     trace_config: Option<trace::Config>,
     batch_config: Option<trace::BatchConfig>,
@@ -64,7 +64,7 @@ pub struct UptraceBuilder {
 impl Default for UptraceBuilder {
     fn default() -> Self {
         Self {
-            dns: std::env::var("UPTRACE_DSN").ok(),
+            dsn: std::env::var("UPTRACE_DSN").ok(),
 
             trace_config: None,
             batch_config: None,
@@ -84,9 +84,9 @@ impl UptraceBuilder {
         Default::default()
     }
 
-    pub fn with_dns<T: Into<String>>(self, dns: T) -> Self {
+    pub fn with_dsn<T: Into<String>>(self, dsn: T) -> Self {
         Self {
-            dns: Some(dns.into()),
+            dsn: Some(dsn.into()),
             ..self
         }
     }
@@ -145,17 +145,17 @@ impl UptraceBuilder {
             return Ok(());
         }
 
-        let dns = Dns::try_from(self.dns.take().unwrap_or_default())?;
-        if dns.is_disabled() {
+        let dsn = Dsn::try_from(self.dsn.take().unwrap_or_default())?;
+        if dsn.is_disabled() {
             return Ok(());
         }
 
         if !self.disable_trace {
-            self.build_trace(&dns)?;
+            self.build_trace(&dsn)?;
         }
 
         if !self.disable_metrics {
-            self.build_metrics(&dns)?;
+            self.build_metrics(&dsn)?;
         }
 
         Ok(())
@@ -165,6 +165,7 @@ impl UptraceBuilder {
 impl UptraceBuilder {
     fn build_resource(&mut self) -> Resource {
         let mut kv = vec![];
+
         if let Ok(host) = hostname::get() {
             kv.push(KeyValue::new(
                 "host.name",
@@ -190,7 +191,7 @@ impl UptraceBuilder {
         Resource::new(kv.into_iter())
     }
 
-    fn build_trace(&mut self, dns: &Dns) -> Result<(), Error> {
+    fn build_trace(&mut self, dsn: &Dsn) -> Result<(), Error> {
         let resource = self.build_resource();
         self.trace_config = if let Some(cfg) = self.trace_config.take() {
             let new_resource = Resource::empty();
@@ -202,21 +203,14 @@ impl UptraceBuilder {
             Some(cfg.with_resource(Resource::empty().merge(&resource)))
         };
 
+        let mut metadata = MetadataMap::with_capacity(1);
+        metadata.insert("uptrace-dsn", dsn.original.as_str().parse().unwrap());
+
         let span_builder: SpanExporterBuilder = opentelemetry_otlp::new_exporter()
             .tonic()
-            .with_endpoint(dns.otlp_grpc_addr())
+            .with_endpoint(dsn.otlp_grpc_addr())
             .with_timeout(Duration::from_secs(5))
-            .with_metadata({
-                let mut map = MetadataMap::new();
-                map.insert(
-                    "uptrace-dsn",
-                    dns.original
-                        .as_str()
-                        .parse()
-                        .map_err(|e| Error::TraceBuildError(Box::new(e)))?,
-                );
-                map
-            })
+            .with_metadata(metadata)
             .into();
 
         let exporter = span_builder
@@ -238,11 +232,10 @@ impl UptraceBuilder {
             .build();
 
         global::set_tracer_provider(provider);
-
         Ok(())
     }
 
-    fn build_metrics(&mut self, _dns: &Dns) -> Result<(), Error> {
+    fn build_metrics(&mut self, _dsn: &Dsn) -> Result<(), Error> {
         let builder = controllers::basic(processors::factory(
             selectors::simple::inexpensive(),
             delta_temporality_selector(),
