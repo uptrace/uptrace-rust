@@ -10,7 +10,7 @@
 //!     UptraceBuilder::new()
 //!         .with_dsn("http://project2_secret_token@localhost:14317/2")
 //!         .with_service_name("lol")
-//!         .install_simple()?;
+//!         .configure_opentelemetry()?;
 //!
 //!     let tracer = global::tracer("rust-service");
 //!     let mut span = tracer.start("my_span");

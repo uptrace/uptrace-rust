@@ -12,7 +12,7 @@
 
 uptrace-rust is an OpenTelemery Rust distribution configured to export
 [traces](https://uptrace.dev/opentelemetry/distributed-tracing.html) and
-[metrics](https://uptrace.dev/opentelemetry/metrics.html) to Uptrace.
+[metrics](https://uptrace.dev/opentelemetry/metrics.html) to [Uptrace](https://uptrace.dev/).
 
 ## Quickstart
 
