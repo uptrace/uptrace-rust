@@ -13,8 +13,7 @@ async fn main() {
         .with_service_name("myservice")
         .with_service_version("1.0.0")
         .with_deployment_environment("testing")
-        .with_disable_metrics()
-        .install_simple()
+        .configure_opentelemetry()
         .unwrap();
 
     let tracer = global::tracer("app_or_crate_name");
