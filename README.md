@@ -22,7 +22,7 @@ Install uptrace-rust:
 cargo add uptrace
 ```
 
-Run the [basic example](example/basic) below using the DSN from the Uptrace project settings page.
+Run the [basic example](examples/basic.rs) below using the DSN from the Uptrace project settings page.
 
 ```shell
 UPTRACE_DSN=http://project2_secret_token@localhost:14317/2 cargo run --example basic
