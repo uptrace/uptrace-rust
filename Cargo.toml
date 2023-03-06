@@ -17,7 +17,6 @@ opentelemetry-otlp = { version = "0.11.0", features = [
     "tls-roots",
 ] }
 hostname = "0.3.1"
-tracing-opentelemetry = "0.18.0"
 tonic = { version = "0.8.3", features = ["tls"] }
 
 [dev-dependencies]
