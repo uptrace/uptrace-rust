@@ -58,8 +58,8 @@ pub struct UptraceBuilder {
     service_version: Option<String>,
     deployment_environment: Option<String>,
 
-    disable_trace: bool,
-    disable_metrics: bool,
+    tracing_disabled: bool,
+    metrics_disabled: bool,
 }
 
 impl Default for UptraceBuilder {
@@ -74,8 +74,8 @@ impl Default for UptraceBuilder {
             service_version: None,
             deployment_environment: None,
 
-            disable_metrics: false,
-            disable_trace: false,
+            metrics_disabled: false,
+            tracing_disabled: false,
         }
     }
 }
@@ -127,16 +127,16 @@ impl UptraceBuilder {
         }
     }
 
-    pub fn with_disable_trace(self) -> Self {
+    pub fn with_tracing_disabled(self) -> Self {
         Self {
-            disable_trace: true,
+            tracing_disabled: true,
             ..self
         }
     }
 
-    pub fn with_disable_metrics(self) -> Self {
+    pub fn with_metrics_disabled(self) -> Self {
         Self {
-            disable_metrics: true,
+            metrics_disabled: true,
             ..self
         }
     }
@@ -151,11 +151,11 @@ impl UptraceBuilder {
             return Ok(());
         }
 
-        if !self.disable_trace {
+        if !self.tracing_disabled {
             self.init_tracing(&dsn)?;
         }
 
-        if !self.disable_metrics {
+        if !self.metrics_disabled {
             self.init_metrics(&dsn)?;
         }
 
