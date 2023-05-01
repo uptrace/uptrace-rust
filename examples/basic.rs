@@ -10,6 +10,7 @@ use uptrace::UptraceBuilder;
 #[tokio::main]
 async fn main() {
     UptraceBuilder::new()
+        //.with_dsn("")
         .with_service_name("myservice")
         .with_service_version("1.0.0")
         .with_deployment_environment("testing")
@@ -36,11 +37,17 @@ async fn main() {
 
             let span = cx.span();
             span.set_attribute(KeyValue::new("db.system", "mysql"));
-            span.set_attribute(KeyValue::new("db.statement", "SELECT * FROM table"));
+            span.set_attribute(KeyValue::new(
+                "db.statement",
+                "SELECT * FROM posts LIMIT 100",
+            ));
         });
 
         let span = cx.span();
-        println!("{:?}", span.span_context().trace_id().to_string());
+        println!(
+            "https://app.uptrace.dev/traces/{}",
+            span.span_context().trace_id().to_string()
+        );
     });
 
     global::shutdown_tracer_provider();

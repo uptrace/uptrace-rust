@@ -37,12 +37,13 @@ pub use error::Error;
 use opentelemetry::runtime;
 use opentelemetry::sdk::export::metrics::aggregation::delta_temporality_selector;
 use opentelemetry::sdk::metrics::selectors;
+use opentelemetry::sdk::resource::{
+    EnvResourceDetector, SdkProvidedResourceDetector, TelemetryResourceDetector,
+};
+use opentelemetry::sdk::Resource;
 use opentelemetry::{
     global,
-    sdk::{
-        trace::{self, BatchSpanProcessor, TracerProvider},
-        Resource,
-    },
+    sdk::trace::{self, BatchSpanProcessor, TracerProvider},
     KeyValue,
 };
 use opentelemetry_otlp::{ExportConfig, Protocol, SpanExporterBuilder, WithExportConfig};
@@ -189,7 +190,15 @@ impl UptraceBuilder {
             ));
         }
 
-        Resource::new(kv.into_iter())
+        Resource::from_detectors(
+            Duration::from_secs(0),
+            vec![
+                Box::new(SdkProvidedResourceDetector),
+                Box::new(EnvResourceDetector::new()),
+                Box::new(TelemetryResourceDetector),
+            ],
+        )
+        .merge(&mut Resource::new(kv.into_iter()))
     }
 
     fn init_tracing(&mut self, dsn: &Dsn) -> Result<(), Error> {
@@ -221,8 +230,8 @@ impl UptraceBuilder {
         let bz = BatchSpanProcessor::builder(exporter, runtime::Tokio)
             .with_batch_config(self.batch_config.take().unwrap_or_else(|| {
                 trace::BatchConfig::default()
-                    .with_max_queue_size(1000)
-                    .with_max_export_batch_size(1000)
+                    .with_max_queue_size(10000)
+                    .with_max_export_batch_size(10000)
                     .with_scheduled_delay(Duration::from_millis(5000))
             }))
             .build();
