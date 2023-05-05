@@ -135,12 +135,37 @@ impl UptraceBuilder {
         self
     }
 
+    pub fn configure_opentelemetry<R: sdk::trace::TraceRuntime>(
+        mut self,
+        runtime: R,
+    ) -> Result<(), Error> {
+        if std::env::var("UPTRACE_DISABLED").is_ok() {
+            return Ok(());
+        }
+
+        let dsn = Dsn::try_from(self.dsn.clone())?;
+        if dsn.is_disabled() {
+            return Ok(());
+        }
+
+        if !self.tracing_disabled {
+            self.init_tracer(&dsn, runtime)?;
+        }
+
+        if !self.metrics_disabled {
+            self.init_metrics(&dsn)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl UptraceBuilder {
     pub fn init_tracer<R: sdk::trace::TraceRuntime>(
-        self,
+        &mut self,
+        dsn: &Dsn,
         runtime: R,
     ) -> Result<sdk::trace::Tracer, Error> {
-        let dsn = Dsn::try_from(self.dsn.clone())?;
-
         let mut metadata = MetadataMap::with_capacity(1);
         metadata.insert("uptrace-dsn", self.dsn.parse().unwrap());
 
@@ -163,18 +188,15 @@ impl UptraceBuilder {
         ))
     }
 
-    pub fn init_metrics(self) -> Result<BasicController, Error> {
-        let dsn = Dsn::try_from(self.dsn.clone())?;
+    pub fn init_metrics(&mut self, dsn: &Dsn) -> Result<BasicController, Error> {
+        let mut metadata = MetadataMap::with_capacity(1);
+        metadata.insert("uptrace-dsn", self.dsn.parse().unwrap());
 
         let export_config = ExportConfig {
             endpoint: dsn.otlp_grpc_addr(),
             timeout: Duration::from_secs(10),
             protocol: Protocol::Grpc,
         };
-
-        let mut metadata = MetadataMap::with_capacity(1);
-        metadata.insert("uptrace-dsn", self.dsn.parse().unwrap());
-
         let exporter = opentelemetry_otlp::new_exporter()
             .tonic()
             .with_export_config(export_config)
@@ -194,9 +216,7 @@ impl UptraceBuilder {
 
         Ok(ctrl)
     }
-}
 
-impl UptraceBuilder {
     fn build_resource(&self) -> Resource {
         let mut kv = vec![];
 
