@@ -18,12 +18,11 @@ pub struct Dsn {
 impl Dsn {
     pub fn otlp_host(&self) -> String {
         if self.host == "uptrace.dev" {
-            "otlp.uptrace.dev:4317".into()
-        } else {
-            match self.port {
-                Some(i) => format!("{}:{}", self.host, i),
-                None => self.host.clone(),
-            }
+            return "otlp.uptrace.dev:4317".into();
+        }
+        match self.port {
+            Some(i) => format!("{}:{}", self.host, i),
+            None => self.host.clone(),
         }
     }
 
@@ -37,12 +36,11 @@ impl Dsn {
 
     pub fn otlp_grpc_addr(&self) -> String {
         if self.host == "uptrace.dev" {
-            "https://otlp.uptrace.dev:4317".into()
-        } else {
-            match self.port {
-                Some(port) => format!("{}://{}:{}", self.scheme, self.host, port),
-                None => format!("{}://{}", self.scheme, self.host),
-            }
+            return "https://otlp.uptrace.dev:4317".into();
+        }
+        match self.port {
+            Some(port) => format!("{}://{}:{}", self.scheme, self.host, port),
+            None => format!("{}://{}", self.scheme, self.host),
         }
     }
 
@@ -60,6 +58,7 @@ impl Display for Dsn {
 
 impl TryFrom<String> for Dsn {
     type Error = Error;
+
     fn try_from(s: String) -> Result<Dsn, Self::Error> {
         if s.is_empty() {
             return Err(Error::EmptyDsn);

@@ -7,6 +7,10 @@ use opentelemetry::{
 };
 use uptrace::UptraceBuilder;
 
+use tracing_opentelemetry::OpenTelemetryLayer;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::Registry;
+
 #[tokio::main]
 async fn main() {
     UptraceBuilder::new()
@@ -18,6 +22,9 @@ async fn main() {
         .unwrap();
 
     let tracer = global::tracer("app_or_crate_name");
+
+    let otel_layer = tracing_opentelemetry::layer().with_tracer(global::get_tracer_provider());
+    let subscriber = Registry::default().with(otel_layer);
 
     tracer.in_span("root-span", |cx| {
         thread::sleep(Duration::from_millis(5));
