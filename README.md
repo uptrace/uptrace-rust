@@ -15,6 +15,6 @@ uptrace-rust is a thin wrapper for
 OpenTelemetry to export [traces](https://uptrace.dev/opentelemetry/distributed-tracing.html) and
 [metrics](https://uptrace.dev/opentelemetry/metrics.html) to [Uptrace](https://uptrace.dev/).
 
-- [Documentation](https://uptrace.dev/get/opentelemetry-rust.html)
-- [Traces example](examples/otlp-traces)
-- [Metrics example](examples/otlp-traces)
+- [**Documentation**](https://uptrace.dev/get/opentelemetry-rust.html)
+- [OTLP Traces example](examples/otlp-traces)
+- [OTLP Metrics example](examples/otlp-traces)
