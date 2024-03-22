@@ -2,14 +2,14 @@ use std::error::Error;
 use std::thread;
 use std::time::Duration;
 
-use opentelemetry::sdk::resource::{
-    EnvResourceDetector, SdkProvidedResourceDetector, TelemetryResourceDetector,
-};
-use opentelemetry::sdk::Resource;
 use opentelemetry::trace::TraceError;
 use opentelemetry::trace::{TraceContextExt, Tracer};
-use opentelemetry::{global, sdk, Key, KeyValue};
+use opentelemetry::{global, Key, KeyValue};
 use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_sdk::resource::{
+    EnvResourceDetector, SdkProvidedResourceDetector, TelemetryResourceDetector,
+};
+use opentelemetry_sdk::Resource;
 use tonic::metadata::MetadataMap;
 
 #[tokio::main]
@@ -55,7 +55,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     Ok(())
 }
 
-fn init_tracer(dsn: String) -> Result<sdk::trace::Tracer, TraceError> {
+fn init_tracer(dsn: String) -> Result<opentelemetry_sdk::trace::Tracer, TraceError> {
     let resource = Resource::from_detectors(
         Duration::from_secs(0),
         vec![
@@ -78,11 +78,12 @@ fn init_tracer(dsn: String) -> Result<sdk::trace::Tracer, TraceError> {
                 .with_metadata(metadata),
         )
         .with_batch_config(
-            sdk::trace::BatchConfig::default()
+            opentelemetry_sdk::trace::BatchConfigBuilder::default()
                 .with_max_queue_size(30000)
                 .with_max_export_batch_size(10000)
-                .with_scheduled_delay(Duration::from_millis(5000)),
+                .with_scheduled_delay(Duration::from_millis(5000))
+                .build(),
         )
-        .with_trace_config(sdk::trace::config().with_resource(resource))
-        .install_batch(opentelemetry::runtime::Tokio)
+        .with_trace_config(opentelemetry_sdk::trace::config().with_resource(resource))
+        .install_batch(opentelemetry_sdk::runtime::Tokio)
 }
