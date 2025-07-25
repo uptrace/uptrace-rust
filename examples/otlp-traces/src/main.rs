@@ -1,24 +1,25 @@
 use std::error::Error;
-use std::thread;
 use std::time::Duration;
+use std::thread;
 
-use opentelemetry::trace::TraceError;
-use opentelemetry::trace::{TraceContextExt, Tracer};
-use opentelemetry::{global, Key, KeyValue};
-use opentelemetry_otlp::WithExportConfig;
-use opentelemetry_sdk::resource::{
-    EnvResourceDetector, SdkProvidedResourceDetector, TelemetryResourceDetector,
-};
-use opentelemetry_sdk::Resource;
 use tonic::metadata::MetadataMap;
+
+use opentelemetry::{global, trace::Tracer, trace::TraceContextExt, KeyValue};
+use opentelemetry_otlp::{WithExportConfig, WithTonicConfig};
+use opentelemetry_sdk::{
+    trace::{SdkTracerProvider},
+    Resource,
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     let dsn = std::env::var("UPTRACE_DSN").expect("Error: UPTRACE_DSN not found");
     println!("using DSN: {}", dsn);
 
-    let _ = init_tracer(dsn)?;
-    let tracer = global::tracer("app_or_crate_name");
+    let provider = build_tracer_provider(dsn)?;
+    global::set_tracer_provider(provider.clone());
+
+    let tracer = global::tracer("example");
 
     tracer.in_span("root-span", |cx| {
         thread::sleep(Duration::from_millis(5));
@@ -27,10 +28,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
             thread::sleep(Duration::from_millis(10));
 
             let span = cx.span();
-            span.set_attribute(Key::new("http.method").string("GET"));
-            span.set_attribute(Key::new("http.route").string("/posts/:id"));
-            span.set_attribute(Key::new("http.url").string("http://localhost:8080/posts/123"));
-            span.set_attribute(Key::new("http.status_code").i64(200));
+            span.set_attribute(KeyValue::new("http.method", "GET"));
+            span.set_attribute(KeyValue::new("http.route", "/posts/:id"));
+            span.set_attribute(KeyValue::new("http.url", "http://localhost:8080/posts/123"));
+            span.set_attribute(KeyValue::new("http.status_code", 200));
         });
 
         tracer.in_span("SELECT", |cx| {
@@ -51,39 +52,33 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
         );
     });
 
-    global::shutdown_tracer_provider();
+    // Flush and shut down
+    provider.force_flush()?;
+    provider.shutdown()?;
+
     Ok(())
 }
 
-fn init_tracer(dsn: String) -> Result<opentelemetry_sdk::trace::Tracer, TraceError> {
-    let resource = Resource::from_detectors(
-        Duration::from_secs(0),
-        vec![
-            Box::new(SdkProvidedResourceDetector),
-            Box::new(EnvResourceDetector::new()),
-            Box::new(TelemetryResourceDetector),
-        ],
-    );
+fn build_tracer_provider(dsn: String) -> Result<SdkTracerProvider, Box<dyn Error + Send + Sync + 'static>> {
+    let resource = Resource::builder()
+        .with_attributes(vec![KeyValue::new("service.name", "example-service")])
+        .build();
 
     let mut metadata = MetadataMap::with_capacity(1);
     metadata.insert("uptrace-dsn", dsn.parse().unwrap());
 
-    opentelemetry_otlp::new_pipeline()
-        .tracing()
-        .with_exporter(
-            opentelemetry_otlp::new_exporter()
-                .tonic()
-                .with_endpoint("https://otlp.uptrace.dev:4317")
-                .with_timeout(Duration::from_secs(5))
-                .with_metadata(metadata),
-        )
-        .with_batch_config(
-            opentelemetry_sdk::trace::BatchConfigBuilder::default()
-                .with_max_queue_size(30000)
-                .with_max_export_batch_size(10000)
-                .with_scheduled_delay(Duration::from_millis(5000))
-                .build(),
-        )
-        .with_trace_config(opentelemetry_sdk::trace::config().with_resource(resource))
-        .install_batch(opentelemetry_sdk::runtime::Tokio)
+    let exporter = opentelemetry_otlp::SpanExporter::builder()
+        .with_tonic()
+        .with_tls_config(tonic::transport::ClientTlsConfig::new().with_native_roots())
+        .with_endpoint("https://api.uptrace.dev:4317")
+        .with_metadata(metadata)
+        .build()?;
+
+    // Assemble the tracer provider
+    let provider = SdkTracerProvider::builder()
+        .with_batch_exporter(exporter)
+        .with_resource(resource)
+        .build();
+
+    Ok(provider)
 }
