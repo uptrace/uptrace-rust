@@ -1,16 +1,18 @@
-use std::time::Duration;
 use std::thread;
+use std::time::Duration;
 
 use tonic::metadata::MetadataMap;
 
-use opentelemetry::{global, trace::Tracer, trace::TraceContextExt, KeyValue};
-use opentelemetry_sdk::{
-    trace::{SdkTracerProvider},
-};
+use opentelemetry::trace::{TraceContextExt, Tracer};
+use opentelemetry::{global, KeyValue};
 use opentelemetry_otlp::{WithExportConfig, WithTonicConfig};
-use opentelemetry_sdk::Resource;
 use opentelemetry_resource_detectors::{
     HostResourceDetector, OsResourceDetector, ProcessResourceDetector,
+};
+use opentelemetry_sdk::Resource;
+use opentelemetry_sdk::{
+    propagation::TraceContextPropagator,
+    trace::{BatchConfigBuilder, BatchSpanProcessor, SdkTracerProvider},
 };
 
 #[tokio::main]
@@ -21,6 +23,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
 
     let provider = build_tracer_provider(dsn)?;
     global::set_tracer_provider(provider.clone());
+    global::set_text_map_propagator(TraceContextPropagator::new());
 
     let tracer = global::tracer("example");
 
@@ -62,7 +65,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
     Ok(())
 }
 
-fn build_tracer_provider(dsn: String) -> Result<SdkTracerProvider, Box<dyn std::error::Error + Send + Sync + 'static>> {
+fn build_tracer_provider(
+    dsn: String,
+) -> Result<SdkTracerProvider, Box<dyn std::error::Error + Send + Sync + 'static>> {
     // Configure gRPC metadata with Uptrace DSN
     let mut metadata = MetadataMap::with_capacity(1);
     metadata.insert("uptrace-dsn", dsn.parse().unwrap());
@@ -73,11 +78,21 @@ fn build_tracer_provider(dsn: String) -> Result<SdkTracerProvider, Box<dyn std::
         .with_tls_config(tonic::transport::ClientTlsConfig::new().with_native_roots())
         .with_endpoint("https://api.uptrace.dev:4317")
         .with_metadata(metadata)
+        .with_timeout(Duration::from_secs(10))
         .build()?;
+
+    let batch_config = BatchConfigBuilder::default()
+        .with_max_queue_size(4096)
+        .with_max_export_batch_size(1024)
+        .with_scheduled_delay(Duration::from_secs(5))
+        .build();
+    let batch = BatchSpanProcessor::builder(exporter)
+        .with_batch_config(batch_config)
+        .build();
 
     // Build the tracer provider
     let provider = SdkTracerProvider::builder()
-        .with_batch_exporter(exporter)
+        .with_span_processor(batch)
         .with_resource(build_resource())
         .build();
 

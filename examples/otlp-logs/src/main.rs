@@ -1,13 +1,13 @@
 use tonic::metadata::MetadataMap;
 
-use opentelemetry::{KeyValue};
-use opentelemetry_sdk::logs::SdkLoggerProvider;
-use opentelemetry_sdk::Resource;
-use opentelemetry_otlp::{WithExportConfig, WithTonicConfig};
+use opentelemetry::KeyValue;
 use opentelemetry_appender_tracing::layer;
+use opentelemetry_otlp::{WithExportConfig, WithTonicConfig};
 use opentelemetry_resource_detectors::{
     HostResourceDetector, OsResourceDetector, ProcessResourceDetector,
 };
+use opentelemetry_sdk::logs::SdkLoggerProvider;
+use opentelemetry_sdk::Resource;
 
 use tracing::error;
 use tracing_subscriber::{prelude::*, EnvFilter};
@@ -58,7 +58,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
     Ok(())
 }
 
-fn init_logger_provider(dsn: String) -> Result<SdkLoggerProvider, Box<dyn std::error::Error + Send + Sync + 'static>> {
+fn init_logger_provider(
+    dsn: String,
+) -> Result<SdkLoggerProvider, Box<dyn std::error::Error + Send + Sync + 'static>> {
     // Configure gRPC metadata with Uptrace DSN
     let mut metadata = MetadataMap::with_capacity(1);
     metadata.insert("uptrace-dsn", dsn.parse().unwrap());
@@ -68,8 +70,8 @@ fn init_logger_provider(dsn: String) -> Result<SdkLoggerProvider, Box<dyn std::e
         .with_tonic()
         .with_tls_config(tonic::transport::ClientTlsConfig::new().with_native_roots())
         .with_endpoint("https://api.uptrace.dev:4317")
-        .with_metadata(metadata).
-        build()?;
+        .with_metadata(metadata)
+        .build()?;
 
     // Build the logger provider with resource attributes
     let provider = SdkLoggerProvider::builder()
