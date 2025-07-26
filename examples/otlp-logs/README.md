@@ -1,7 +1,7 @@
-# Using OTLP Metrics Exporter with Uptrace
+# Using OTLP Logs Exporter with Uptrace
 
 This example demonstrates how to configure
-[OpenTelemetry Rust](https://uptrace.dev/get/opentelemetry-rust) to export metrics to Uptrace.
+[OpenTelemetry Rust](https://uptrace.dev/get/opentelemetry-rust) to export logs to Uptrace.
 
 ## Prerequisites
 
