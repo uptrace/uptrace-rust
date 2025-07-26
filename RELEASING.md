@@ -1,4 +1,28 @@
-# Publishing a new version
+# Releasing
+
+## Upgrade dependecies
+
+Install `cargo-edit`:
+
+```shell
+cargo install cargo-edit
+```
+
+Then run:
+
+```shell
+cargo upgrade  --incompatible
+```
+
+## Running tests
+
+To run tests:
+
+```shell
+cargo test
+```
+
+## Publishing a new version
 
 To publish a new version:
 

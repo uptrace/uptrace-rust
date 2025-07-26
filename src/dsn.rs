@@ -133,23 +133,23 @@ mod tests {
 
     #[test]
     fn valid_dsn() {
-        let raw = "http://project1_secret_token@localhost:14317/1";
+        let raw = "http://project1_secret@localhost:14317/1";
         let dsn: Dsn = raw.to_string().try_into().unwrap();
         assert_eq!(dsn.original, raw.to_string());
         assert_eq!(dsn.host, "localhost".to_string());
         assert_eq!(dsn.port, Some(14317));
         assert_eq!(dsn.scheme, "http".to_string());
-        assert_eq!(dsn.token, "project1_secret_token".to_string());
+        assert_eq!(dsn.token, "project1_secret".to_string());
         assert_eq!(dsn.project_id, "1".to_string());
     }
 
     #[test]
     fn invalid_dsn() {
         let dsn = vec![
-            "http://project1_secret_token@localhost:14317",
-            "http://project1_secret_token@:14317/1",
+            "http://project1_secret@localhost:14317",
+            "http://project1_secret@:14317/1",
             "http://localhost:14317/1",
-            "project1_secret_token@localhost:14317/1",
+            "project1_secret@localhost:14317/1",
         ];
         for i in dsn.into_iter() {
             eprintln!("{i}");
@@ -184,11 +184,11 @@ mod tests {
     fn app_addr() {
         let tables = vec![
             (
-                "http://token@localhost:14317/project_id",
+                "http://token@localhost:14318?grpc=14317",
                 "http://localhost:14318",
             ),
             (
-                "https://key@uptrace.dev/project_id",
+                "https://secret@api.uptrace.dev?grpc=4317",
                 "https://app.uptrace.dev",
             ),
         ];
