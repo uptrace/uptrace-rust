@@ -12,14 +12,16 @@ use opentelemetry_resource_detectors::{
 use opentelemetry_sdk::Resource;
 use opentelemetry_sdk::{
     propagation::TraceContextPropagator,
-    trace::{BatchConfigBuilder, BatchSpanProcessor, SdkTracerProvider},
+    trace::{
+        BatchConfigBuilder, BatchSpanProcessor, RandomIdGenerator, Sampler, SdkTracerProvider,
+    },
 };
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
-    // Read Uptrace DSN from env (format: https://uptrace.dev/get#dsn)
+    // Read Uptrace DSN from environment (format: https://uptrace.dev/get#dsn)
     let dsn = std::env::var("UPTRACE_DSN").expect("Error: UPTRACE_DSN not found");
-    println!("using DSN: {}", dsn);
+    println!("Using DSN: {}", dsn);
 
     let provider = build_tracer_provider(dsn)?;
     global::set_tracer_provider(provider.clone());
@@ -53,7 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
 
         let span = cx.span();
         println!(
-            "https://app.uptrace.dev/traces/{}",
+            "View trace: https://app.uptrace.dev/traces/{}",
             span.span_context().trace_id().to_string()
         );
     });
@@ -72,7 +74,7 @@ fn build_tracer_provider(
     let mut metadata = MetadataMap::with_capacity(1);
     metadata.insert("uptrace-dsn", dsn.parse().unwrap());
 
-    // Create OTLP metric exporter
+    // Create OTLP span exporter
     let exporter = opentelemetry_otlp::SpanExporter::builder()
         .with_tonic()
         .with_tls_config(tonic::transport::ClientTlsConfig::new().with_native_roots())
@@ -94,6 +96,8 @@ fn build_tracer_provider(
     let provider = SdkTracerProvider::builder()
         .with_span_processor(batch)
         .with_resource(build_resource())
+        .with_sampler(Sampler::AlwaysOn)
+        .with_id_generator(RandomIdGenerator::default())
         .build();
 
     Ok(provider)

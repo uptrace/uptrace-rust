@@ -1,4 +1,3 @@
-use std::error::Error;
 use std::time::Duration;
 
 use tonic::metadata::MetadataMap;
@@ -12,10 +11,10 @@ use opentelemetry_sdk::metrics::{PeriodicReader, SdkMeterProvider, Temporality};
 use opentelemetry_sdk::Resource;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
-    // Read Uptrace DSN from env (format: https://uptrace.dev/get#dsn)
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+    // Read Uptrace DSN from environment (format: https://uptrace.dev/get#dsn)
     let dsn = std::env::var("UPTRACE_DSN").expect("Error: UPTRACE_DSN not found");
-    println!("using DSN: {}", dsn);
+    println!("Using DSN: {}", dsn);
 
     // Initialize the OpenTelemetry MeterProvider
     let provider = init_meter_provider(dsn)?;
@@ -40,7 +39,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
 
 fn init_meter_provider(
     dsn: String,
-) -> Result<SdkMeterProvider, Box<dyn Error + Send + Sync + 'static>> {
+) -> Result<SdkMeterProvider, Box<dyn std::error::Error + Send + Sync + 'static>> {
     // Configure gRPC metadata with Uptrace DSN
     let mut metadata = MetadataMap::with_capacity(1);
     metadata.insert("uptrace-dsn", dsn.parse().unwrap());

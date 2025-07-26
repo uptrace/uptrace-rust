@@ -14,9 +14,9 @@ use tracing_subscriber::{prelude::*, EnvFilter};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
-    // Read Uptrace DSN from env (format: https://uptrace.dev/get#dsn)
+    // Read Uptrace DSN from environment (format: https://uptrace.dev/get#dsn)
     let dsn = std::env::var("UPTRACE_DSN").expect("Error: UPTRACE_DSN not found");
-    println!("using DSN: {}", dsn);
+    println!("Using DSN: {}", dsn);
 
     // Initialize the OpenTelemetry LoggerProvider
     let provider = init_logger_provider(dsn)?;
@@ -28,9 +28,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         .add_directive("reqwest=off".parse().unwrap());
     let otel_layer = layer::OpenTelemetryTracingBridge::new(&provider).with_filter(filter_otel);
 
-    // Create a new tracing::Fmt layer to print the logs to stdout. It has a
-    // default filter of `info` level and above, and `debug` and above for logs
-    // from OpenTelemetry crates. The filter levels can be customized as needed.
+    // Create a tracing::Fmt layer to print logs to stdout
+    // Default filter is `info` level and above, with `debug` and above for OpenTelemetry crates
     let filter_fmt = EnvFilter::new("info").add_directive("opentelemetry=debug".parse().unwrap());
     let fmt_layer = tracing_subscriber::fmt::layer()
         .with_thread_names(true)
