@@ -1,18 +1,21 @@
-use std::error::Error;
 use std::time::Duration;
 use std::thread;
 
 use tonic::metadata::MetadataMap;
 
 use opentelemetry::{global, trace::Tracer, trace::TraceContextExt, KeyValue};
-use opentelemetry_otlp::{WithExportConfig, WithTonicConfig};
 use opentelemetry_sdk::{
     trace::{SdkTracerProvider},
-    Resource,
+};
+use opentelemetry_otlp::{WithExportConfig, WithTonicConfig};
+use opentelemetry_sdk::Resource;
+use opentelemetry_resource_detectors::{
+    HostResourceDetector, OsResourceDetector, ProcessResourceDetector,
 };
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+    // Read Uptrace DSN from env (format: https://uptrace.dev/get#dsn)
     let dsn = std::env::var("UPTRACE_DSN").expect("Error: UPTRACE_DSN not found");
     println!("using DSN: {}", dsn);
 
@@ -52,21 +55,19 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
         );
     });
 
-    // Flush and shut down
+    // Flush and shutdown the provider to ensure all data is exported
     provider.force_flush()?;
     provider.shutdown()?;
 
     Ok(())
 }
 
-fn build_tracer_provider(dsn: String) -> Result<SdkTracerProvider, Box<dyn Error + Send + Sync + 'static>> {
-    let resource = Resource::builder()
-        .with_attributes(vec![KeyValue::new("service.name", "example-service")])
-        .build();
-
+fn build_tracer_provider(dsn: String) -> Result<SdkTracerProvider, Box<dyn std::error::Error + Send + Sync + 'static>> {
+    // Configure gRPC metadata with Uptrace DSN
     let mut metadata = MetadataMap::with_capacity(1);
     metadata.insert("uptrace-dsn", dsn.parse().unwrap());
 
+    // Create OTLP metric exporter
     let exporter = opentelemetry_otlp::SpanExporter::builder()
         .with_tonic()
         .with_tls_config(tonic::transport::ClientTlsConfig::new().with_native_roots())
@@ -74,11 +75,23 @@ fn build_tracer_provider(dsn: String) -> Result<SdkTracerProvider, Box<dyn Error
         .with_metadata(metadata)
         .build()?;
 
-    // Assemble the tracer provider
+    // Build the tracer provider
     let provider = SdkTracerProvider::builder()
         .with_batch_exporter(exporter)
-        .with_resource(resource)
+        .with_resource(build_resource())
         .build();
 
     Ok(provider)
+}
+
+fn build_resource() -> Resource {
+    Resource::builder()
+        .with_detector(Box::new(OsResourceDetector))
+        .with_detector(Box::new(HostResourceDetector::default()))
+        .with_detector(Box::new(ProcessResourceDetector))
+        .with_attributes([
+            KeyValue::new("service.version", "1.2.3"),
+            KeyValue::new("deployment.environment", "production"),
+        ])
+        .build()
 }
