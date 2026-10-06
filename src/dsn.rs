@@ -1,201 +1,283 @@
-use core::fmt;
-use std::fmt::Display;
+use std::fmt;
+use std::str::FromStr;
 
+use percent_encoding::percent_decode_str;
 use url::Url;
 
 use crate::Error;
 
-#[derive(Default)]
+const CLOUD_HOST: &str = "uptrace.dev";
+
+/// Uptrace data source name, for example, `https://<token>@api.uptrace.dev?grpc=4317`.
+///
+/// You can find your project DSN in the project settings.
+#[derive(Clone, PartialEq, Eq)]
 pub struct Dsn {
-    pub(crate) original: String,
-    pub(crate) scheme: String,
-    pub(crate) host: String,
-    pub(crate) port: Option<u16>,
-    pub(crate) project_id: String,
-    pub(crate) token: String,
+    original: String,
+    scheme: String,
+    host: String,
+    http_port: Option<u16>,
+    grpc_port: Option<u16>,
+    token: String,
 }
 
 impl Dsn {
-    pub fn otlp_host(&self) -> String {
-        if self.host == "uptrace.dev" {
-            return "otlp.uptrace.dev:4317".into();
-        }
-        match self.port {
-            Some(i) => format!("{}:{}", self.host, i),
-            None => self.host.clone(),
-        }
+    /// Parses a DSN string.
+    pub fn parse(s: &str) -> Result<Self, Error> {
+        s.parse()
     }
 
-    pub fn app_addr(&self) -> String {
-        if self.host == "uptrace.dev" {
+    /// URL scheme, `http` or `https`.
+    pub fn scheme(&self) -> &str {
+        &self.scheme
+    }
+
+    /// Normalized host name; `api.uptrace.dev` is reported as `uptrace.dev`.
+    pub fn host(&self) -> &str {
+        &self.host
+    }
+
+    /// Project token used to authenticate requests.
+    pub fn token(&self) -> &str {
+        &self.token
+    }
+
+    /// Port of the OTLP/HTTP endpoint and the Uptrace UI.
+    pub fn http_port(&self) -> Option<u16> {
+        self.http_port
+    }
+
+    /// Port of the OTLP/gRPC endpoint.
+    pub fn grpc_port(&self) -> Option<u16> {
+        self.grpc_port
+    }
+
+    /// Whether the DSN is a placeholder copied from the docs, e.g. `https://<token>@uptrace.dev`.
+    pub fn is_dummy(&self) -> bool {
+        self.token == "<token>"
+    }
+
+    fn is_cloud(&self) -> bool {
+        self.host == CLOUD_HOST
+    }
+
+    /// Base URL of the Uptrace UI, e.g. `https://app.uptrace.dev`.
+    pub fn site_url(&self) -> String {
+        if self.is_cloud() {
             return "https://app.uptrace.dev".into();
         }
-
-        format!("{}://{}:{}", self.scheme, self.host, 14318)
+        self.url_with_port(self.http_port)
     }
 
-    pub fn otlp_grpc_addr(&self) -> String {
-        if self.host == "uptrace.dev" {
-            return "https://otlp.uptrace.dev:4317".into();
+    /// OTLP/HTTP endpoint without the signal path, e.g. `https://api.uptrace.dev:443`.
+    pub fn otlp_http_endpoint(&self) -> String {
+        if self.is_cloud() {
+            return "https://api.uptrace.dev:443".into();
         }
-        match self.port {
+        self.url_with_port(self.http_port)
+    }
+
+    /// OTLP/gRPC endpoint, e.g. `https://api.uptrace.dev:4317`.
+    pub fn otlp_grpc_endpoint(&self) -> String {
+        if self.is_cloud() {
+            return "https://api.uptrace.dev:4317".into();
+        }
+        self.url_with_port(self.grpc_port)
+    }
+
+    fn url_with_port(&self, port: Option<u16>) -> String {
+        match port {
             Some(port) => format!("{}://{}:{}", self.scheme, self.host, port),
             None => format!("{}://{}", self.scheme, self.host),
         }
     }
+}
 
-    #[inline]
-    pub(crate) fn is_disabled(&self) -> bool {
-        self.project_id == "<project_id>" || self.token == "<token>"
+impl FromStr for Dsn {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.is_empty() {
+            return Err(Error::EmptyDsn);
+        }
+
+        let invalid = |reason: &str| Error::InvalidDsn {
+            dsn: s.to_string(),
+            reason: reason.to_string(),
+        };
+
+        let url = Url::parse(s).map_err(|err| invalid(&err.to_string()))?;
+
+        let host = match url.host_str() {
+            Some("") | None => return Err(invalid("host is missing")),
+            Some("api.uptrace.dev") => CLOUD_HOST.to_string(),
+            Some(host) => host.to_string(),
+        };
+        // The url crate percent-encodes the username, e.g. `<token>` placeholders.
+        let token = percent_decode_str(url.username())
+            .decode_utf8()
+            .map_err(|_| invalid("token is not valid UTF-8"))?
+            .into_owned();
+        if token.is_empty() {
+            return Err(invalid("token is missing"));
+        }
+
+        let mut http_port = url.port_or_known_default();
+        let grpc_port = match url.query_pairs().find(|(k, _)| k == "grpc") {
+            Some((_, port)) => Some(
+                port.parse::<u16>()
+                    .map_err(|_| invalid("grpc port is not a number"))?,
+            ),
+            // Without an explicit gRPC port, the DSN port is the gRPC port,
+            // and the self-hosted default 14317 pairs with HTTP port 14318.
+            None => {
+                let grpc = http_port.or(Some(4317));
+                if http_port == Some(14317) {
+                    http_port = Some(14318);
+                }
+                grpc
+            }
+        };
+
+        Ok(Dsn {
+            original: s.to_string(),
+            scheme: url.scheme().to_string(),
+            host,
+            http_port,
+            grpc_port,
+            token,
+        })
     }
 }
 
-impl Display for Dsn {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.original)
+impl TryFrom<&str> for Dsn {
+    type Error = Error;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        s.parse()
     }
 }
 
 impl TryFrom<String> for Dsn {
     type Error = Error;
 
-    fn try_from(s: String) -> Result<Dsn, Self::Error> {
-        if s.is_empty() {
-            return Err(Error::EmptyDsn);
-        }
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        s.parse()
+    }
+}
 
-        let url = Url::parse(&s).map_err(|e| Error::InvalidDsn {
-            dsn: s.clone(),
-            reason: e.to_string(),
-        })?;
-        if url.scheme().is_empty() {
-            return Err(Error::InvalidDsn {
-                dsn: s,
-                reason: "schema is not exist".into(),
-            });
-        }
+impl fmt::Display for Dsn {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.original)
+    }
+}
 
-        let host = if let Some(mut h) = url.host_str() {
-            if h == "api.uptrace.dev" {
-                h = "uptrace.dev";
-            }
-
-            h.to_string()
-        } else {
-            return Err(Error::InvalidDsn {
-                dsn: s,
-                reason: "host is not exist".into(),
-            });
-        };
-
-        let path = url
-            .path_segments()
-            .and_then(|x| {
-                let path = x.filter(|x| !x.is_empty()).collect::<Vec<&str>>();
-                if path.is_empty() {
-                    None
-                } else {
-                    Some(path)
-                }
-            })
-            .ok_or_else(|| Error::InvalidDsn {
-                dsn: s.clone(),
-                reason: "project id is not exist".into(),
-            })?;
-
-        if url.username().is_empty() {
-            return Err(Error::InvalidDsn {
-                dsn: s.clone(),
-                reason: "token is not exist".into(),
-            });
-        }
-
-        Ok(Dsn {
-            original: s,
-            scheme: url.scheme().into(),
-            host: if host.eq("api.uptrace.dev") {
-                "uptrace.dev".into()
-            } else {
-                host
-            },
-            port: url.port(),
-            token: url.username().into(),
-            project_id: path[0].into(),
-        })
+// The DSN contains a secret token, so don't leak it via `{:?}`.
+impl fmt::Debug for Dsn {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Dsn")
+            .field("scheme", &self.scheme)
+            .field("host", &self.host)
+            .field("http_port", &self.http_port)
+            .field("grpc_port", &self.grpc_port)
+            .finish_non_exhaustive()
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::vec;
-
-    use super::Dsn;
+    use super::*;
 
     #[test]
-    fn valid_dsn() {
-        let raw = "http://project1_secret@localhost:14317/1";
-        let dsn: Dsn = raw.to_string().try_into().unwrap();
-        assert_eq!(dsn.original, raw.to_string());
-        assert_eq!(dsn.host, "localhost".to_string());
-        assert_eq!(dsn.port, Some(14317));
-        assert_eq!(dsn.scheme, "http".to_string());
-        assert_eq!(dsn.token, "project1_secret".to_string());
-        assert_eq!(dsn.project_id, "1".to_string());
-    }
-
-    #[test]
-    fn invalid_dsn() {
-        let dsn = vec![
-            "http://project1_secret@localhost:14317",
-            "http://project1_secret@:14317/1",
-            "http://localhost:14317/1",
-            "project1_secret@localhost:14317/1",
-        ];
-        for i in dsn.into_iter() {
-            eprintln!("{i}");
-            assert!(Dsn::try_from(i.to_string()).is_err())
-        }
-    }
-
-    #[test]
-    fn oltp_host() {
-        let tables = vec![
-            ("https://key@uptrace.dev/1", "otlp.uptrace.dev:4317"),
-            ("https://key@api.uptrace.dev/1", "otlp.uptrace.dev:4317"),
-            ("https://key@localhost:1234/1", "localhost:1234"),
+    fn parse() {
+        // dsn, grpc endpoint, http endpoint, site url
+        let tests = [
             (
-                "https://AQDan_E_EPe3QAF9fMP0PiVr5UWOu4q5@demo-api.uptrace.dev:4317/1",
-                "demo-api.uptrace.dev:4317",
+                "https://token@uptrace.dev/1",
+                "https://api.uptrace.dev:4317",
+                "https://api.uptrace.dev:443",
+                "https://app.uptrace.dev",
             ),
-            ("http://token@localhost:14317/project_id", "localhost:14317"),
             (
-                "https://key@uptrace.dev/project_id",
-                "otlp.uptrace.dev:4317",
+                "https://token@api.uptrace.dev/1",
+                "https://api.uptrace.dev:4317",
+                "https://api.uptrace.dev:443",
+                "https://app.uptrace.dev",
             ),
-        ];
-
-        for (i, j) in tables {
-            let dsn = Dsn::try_from(i.to_string()).unwrap();
-            assert_eq!(dsn.otlp_host(), j);
-        }
-    }
-
-    #[test]
-    fn app_addr() {
-        let tables = vec![
             (
-                "http://token@localhost:14318?grpc=14317",
+                "https://token@demo.uptrace.dev/1?grpc=4317",
+                "https://demo.uptrace.dev:4317",
+                "https://demo.uptrace.dev:443",
+                "https://demo.uptrace.dev:443",
+            ),
+            (
+                "https://token@localhost:1234/1",
+                "https://localhost:1234",
+                "https://localhost:1234",
+                "https://localhost:1234",
+            ),
+            (
+                "http://token@localhost:14317/project_id",
+                "http://localhost:14317",
+                "http://localhost:14318",
                 "http://localhost:14318",
             ),
             (
-                "https://secret@api.uptrace.dev?grpc=4317",
-                "https://app.uptrace.dev",
+                "https://AQDan_E_EPe3QAF9fMP0PiVr5UWOu4q5@demo-api.uptrace.dev:4317/1",
+                "https://demo-api.uptrace.dev:4317",
+                "https://demo-api.uptrace.dev:4317",
+                "https://demo-api.uptrace.dev:4317",
+            ),
+            (
+                "http://Qcn7rcwWO_w0ePo7WmeUtw@localhost:14318?grpc=14317",
+                "http://localhost:14317",
+                "http://localhost:14318",
+                "http://localhost:14318",
             ),
         ];
 
-        for (i, j) in tables {
-            let dsn = Dsn::try_from(i.to_string()).unwrap();
-            assert_eq!(dsn.app_addr(), j);
+        for (raw, grpc, http, site_url) in tests {
+            let dsn = Dsn::parse(raw).unwrap();
+            assert_eq!(dsn.to_string(), raw);
+            assert_eq!(dsn.otlp_grpc_endpoint(), grpc, "{raw}");
+            assert_eq!(dsn.otlp_http_endpoint(), http, "{raw}");
+            assert_eq!(dsn.site_url(), site_url, "{raw}");
         }
+    }
+
+    #[test]
+    fn fields() {
+        let dsn = Dsn::parse("http://project1_secret@localhost:14317/1").unwrap();
+        assert_eq!(dsn.scheme(), "http");
+        assert_eq!(dsn.host(), "localhost");
+        assert_eq!(dsn.token(), "project1_secret");
+        assert_eq!(dsn.http_port(), Some(14318));
+        assert_eq!(dsn.grpc_port(), Some(14317));
+        assert!(!dsn.is_dummy());
+        assert!(Dsn::parse("https://<token>@uptrace.dev")
+            .unwrap()
+            .is_dummy());
+    }
+
+    #[test]
+    fn invalid() {
+        assert!(matches!(Dsn::parse(""), Err(Error::EmptyDsn)));
+
+        for raw in [
+            "http://localhost:14317/1",
+            "project1_secret@localhost:14317/1",
+            "http://token@localhost?grpc=abc",
+        ] {
+            assert!(
+                matches!(Dsn::parse(raw), Err(Error::InvalidDsn { .. })),
+                "{raw}"
+            );
+        }
+    }
+
+    #[test]
+    fn debug_hides_token() {
+        let dsn = Dsn::parse("https://secret@uptrace.dev/1").unwrap();
+        assert!(!format!("{dsn:?}").contains("secret"));
     }
 }

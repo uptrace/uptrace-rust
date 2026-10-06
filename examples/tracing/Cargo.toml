@@ -1,0 +1,10 @@
+[package]
+name = "tracing-example"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+uptrace = { path = "../..", features = ["tracing"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "registry"] }
