@@ -56,7 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
         let span = cx.span();
         println!(
             "View trace: https://app.uptrace.dev/traces/{}",
-            span.span_context().trace_id().to_string()
+            span.span_context().trace_id()
         );
     });
 

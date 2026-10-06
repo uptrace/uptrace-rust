@@ -1,0 +1,10 @@
+[package]
+name = "grpc"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+uptrace = { path = "../..", default-features = false, features = ["grpc"] }
+opentelemetry = "0.33"
+tokio = { version = "1", features = ["full"] }

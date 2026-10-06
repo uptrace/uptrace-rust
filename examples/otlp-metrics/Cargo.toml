@@ -6,8 +6,8 @@ publish = false
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
-tonic = { version = "0.13", features = ["tls-native-roots", "gzip"] }
-opentelemetry = { version = "0.30", features = ["metrics"] }
-opentelemetry_sdk = { version = "0.30", features = ["rt-tokio", "metrics"] }
-opentelemetry-otlp = { version = "0.30", features = ["grpc-tonic", "gzip-tonic", "tls-roots", "metrics"] }
-opentelemetry-resource-detectors = "0.9"
+tonic = { version = "0.14", features = ["tls-native-roots", "gzip"] }
+opentelemetry = { version = "0.33", features = ["metrics"] }
+opentelemetry_sdk = { version = "0.33", features = ["rt-tokio", "metrics"] }
+opentelemetry-otlp = { version = "0.33", features = ["grpc-tonic", "gzip-tonic", "tls-ring", "tls-roots", "metrics"] }
+opentelemetry-resource-detectors = "0.13"
